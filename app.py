@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from utils.data_loader import load_and_clean_data
+from utils.data_loader import load_and_clean_uploaded_data
 from analysis.bid_analysis import BidAnalyzer
 
 # Configuration de la page
