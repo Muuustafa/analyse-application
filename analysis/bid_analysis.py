@@ -132,25 +132,32 @@ class BidAnalyzer:
         return pd.DataFrame(comparison_data)
     
     def get_ts_performance_details(self):
-        """Détails de performance de TS"""
+        """Détails de performance de TS - CORRIGÉ"""
         ts_data = self.data[self.data['distributeur'] == self.ts_name]
         
         if ts_data.empty:
             return pd.DataFrame()
         
+        # Performance de TS par paillasse
         performance = ts_data.groupby('paillasse').agg({
             'montant soumission': ['sum', 'count', 'mean'],
             'gamme': 'nunique'
         }).round(2)
         
-        performance.columns = ['montant_total', 'nombre_soumissions', 'montant_moyen', 'gammes_couvertes']
+        performance.columns = ['montant_total_ts', 'nombre_soumissions', 'montant_moyen', 'gammes_couvertes']
+        performance = performance.reset_index()
         
-        # Comparaison avec le marché
-        market_by_paillasse = self.data.groupby('paillasse')['montant soumission'].sum()
-        performance = performance.merge(market_by_paillasse, on='paillasse', suffixes=('_ts', '_marche'))
-        performance['part_marche'] = (performance['montant_total_ts'] / performance['montant soumission'] * 100).round(2)
+        # Montant total du marché par paillasse
+        market_by_paillasse = self.data.groupby('paillasse')['montant soumission'].sum().reset_index()
+        market_by_paillasse.columns = ['paillasse', 'montant_total_marche']
         
-        return performance.reset_index()
+        # Fusionner les données
+        performance = performance.merge(market_by_paillasse, on='paillasse', how='left')
+        
+        # Calculer la part de marché
+        performance['part_marche'] = (performance['montant_total_ts'] / performance['montant_total_marche'] * 100).round(2)
+        
+        return performance
     
     def get_ts_strong_points(self):
         """Points forts de TS (part de marché >= 20%)"""
