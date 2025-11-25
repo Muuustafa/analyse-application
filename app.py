@@ -105,7 +105,7 @@ if section == "🎯 Vue d'Ensemble":
     market_distribution = analyzer.get_market_distribution()
     fig_market_share = px.pie(
         market_distribution,
-        values='montant_soumission',
+        values='montant soumission',
         names='distributeur',
         title="Répartition du Marché par Distributeur"
     )
@@ -172,7 +172,7 @@ elif section == "📊 Par Paillasse":
         
         fig_distributor = px.pie(
             distributor_share,
-            values='montant_soumission',
+            values='montant soumission',
             names='distributeur',
             title=f"Répartition {selected_paillasse} par Distributeur"
         )
