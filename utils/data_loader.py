@@ -1,6 +1,41 @@
 import pandas as pd
 import streamlit as st
 
+def load_and_clean_uploaded_data(uploaded_files):
+    """
+    Charge et nettoie les données de fichiers Excel uploadés
+    Compatible avec l'import dans app.py
+    
+    Args:
+        uploaded_files: Liste de fichiers uploadés via Streamlit
+        
+    Returns:
+        DataFrame: Données combinées et nettoyées
+    """
+    try:
+        if not uploaded_files:
+            return pd.DataFrame()
+        
+        # Si un seul fichier est uploadé, traiter normalement
+        if len(uploaded_files) == 1:
+            return load_and_clean_data(uploaded_files[0])
+        else:
+            # Combiner plusieurs fichiers
+            all_data = []
+            for file in uploaded_files:
+                df = load_and_clean_data(file)
+                if not df.empty:
+                    all_data.append(df)
+            
+            if all_data:
+                return pd.concat(all_data, ignore_index=True)
+            else:
+                return pd.DataFrame()
+                
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des fichiers: {str(e)}")
+        return pd.DataFrame()
+
 def load_and_clean_data(uploaded_file):
     """
     Charge et nettoie les données du fichier Excel uploadé
