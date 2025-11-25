@@ -1,95 +1,60 @@
 import pandas as pd
 import streamlit as st
 
-def load_and_clean_uploaded_data(uploaded_files):
+def load_and_clean_data(uploaded_file):
     """
-    Charge et nettoie les données des fichiers Excel uploadés
+    Charge et nettoie les données du fichier Excel uploadé
+    
+    Args:
+        uploaded_file: Fichier uploadé via Streamlit
+        
+    Returns:
+        DataFrame: Données nettoyées et standardisées
     """
-    all_data = []
-    
-    for uploaded_file in uploaded_files:
-        try:
-            # Charger le fichier Excel
-            df = pd.read_excel(uploaded_file)
-            
-            # Standardiser les noms de colonnes
-            df.columns = [col.strip().lower() for col in df.columns]
-            
-            # Vérifier que les colonnes requises sont présentes
-            required_columns = ['catégorie', 'gamme', 'modele', 'marque', 'distributeur', 'montant soumission']
-            missing_columns = [col for col in required_columns if col not in df.columns]
-            
-            if missing_columns:
-                st.warning(f"Colonnes manquantes dans {uploaded_file.name}: {missing_columns}")
-                continue
-            
-            # Nettoyer les données
-            df = clean_dataframe(df)
-            
-            # Ajouter le nom du fichier source
-            df['source_fichier'] = uploaded_file.name
-            
-            all_data.append(df)
-            
-        except Exception as e:
-            st.error(f"Erreur lors du chargement de {uploaded_file.name}: {str(e)}")
-    
-    if not all_data:
-        st.error("Aucune donnée valide n'a pu être chargée.")
+    try:
+        # Charger le fichier Excel
+        df = pd.read_excel(uploaded_file)
+        
+        # Nettoyer les noms de colonnes
+        df.columns = [col.strip().lower() for col in df.columns]
+        
+        # Standardiser les textes en majuscules
+        text_columns = ['paillasse', 'gamme', 'modele', 'marque', 'distributeur']
+        for col in text_columns:
+            if col in df.columns:
+                df[col] = df[col].astype(str).str.upper().str.strip()
+        
+        # Nettoyer les montants
+        if 'montant soumission' in df.columns:
+            df['montant soumission'] = pd.to_numeric(df['montant soumission'], errors='coerce').fillna(0)
+        
+        # Supprimer les lignes sans distributeur ou sans montant
+        df = df[df['distributeur'].notna() & (df['distributeur'] != 'NAN')]
+        df = df[df['montant soumission'] > 0]
+        
+        return df
+        
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des données: {str(e)}")
         return pd.DataFrame()
-    
-    # Fusionner toutes les données
-    combined_data = pd.concat(all_data, ignore_index=True)
-    
-    return combined_data
 
-def clean_dataframe(df):
+def validate_data_structure(df):
     """
-    Nettoie et standardise le dataframe
+    Valide la structure des données
+    
+    Args:
+        df: DataFrame à valider
+        
+    Returns:
+        tuple: (bool, str) - (Est valide, Message d'erreur)
     """
-    # Faire une copie pour éviter les warnings
-    df_clean = df.copy()
+    required_columns = ['paillasse', 'gamme', 'distributeur', 'montant soumission']
     
-    # Nettoyer les colonnes texte
-    text_columns = ['catégorie', 'gamme', 'modele', 'marque', 'distributeur']
-    for col in text_columns:
-        if col in df_clean.columns:
-            df_clean[col] = df_clean[col].astype(str).str.strip()
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        return False, f"Colonnes manquantes: {', '.join(missing_columns)}"
     
-    # Nettoyer la colonne montant
-    if 'montant soumission' in df_clean.columns:
-        df_clean['montant soumission'] = (
-            df_clean['montant soumission']
-            .astype(str)
-            .str.replace(' FCFA', '', regex=False)
-            .str.replace(' ', '')
-            .str.replace(',', '')
-            .replace('nan', '0')
-            .replace('None', '0')
-            .fillna('0')
-            .astype(float)
-        )
+    if df.empty:
+        return False, "Le fichier ne contient aucune donnée valide"
     
-    # Standardiser les noms de distributeurs
-    if 'distributeur' in df_clean.columns:
-        df_clean['distributeur'] = df_clean['distributeur'].str.upper().str.strip()
-    
-    return df_clean
-
-def categorize_gamme(gamme):
-    """
-    Catégorise les gammes selon les 3 catégories principales
-    """
-    if pd.isna(gamme) or gamme == 'nan':
-        return 'Non classifié'
-    
-    gamme_lower = str(gamme).lower()
-    
-    if any(word in gamme_lower for word in ['biologie', 'bactério', 'hématologie', 'biochimie', 'sérologie', 'immunologie', 'parasitologie']):
-        return 'Biologie'
-    elif any(word in gamme_lower for word in ['chirurgie', 'anesthésie', 'dentaire', 'bloc opératoire', 'instrumentation', 'pédiatrie', 'réanimation', 'urgences']):
-        return 'Chirurgie'
-    elif any(word in gamme_lower for word in ['imagerie', 'radiologie', 'échographie', 'cardio', 'neurologie', 'diagnostic']):
-        return 'Imagerie'
-    else:
-        return 'Autre'
+    return True, "Structure des données valide"
