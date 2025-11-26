@@ -149,25 +149,32 @@ def get_competitors_analysis(data):
     return competitor_stats.reset_index().sort_values('montant_total', ascending=False)
 
 def get_ts_performance_details(data):
-    """Détails de performance de TS"""
+    """Détails de performance de TS - CORRIGÉ"""
     ts_data = data[data['distributeur'] == 'TECHNOLOGIES SERVICES']
     
     if ts_data.empty:
         return pd.DataFrame()
     
+    # Performance de TS par paillasse
     performance = ts_data.groupby('paillasse').agg({
         'montant soumission': ['sum', 'count', 'mean'],
         'gamme': 'nunique'
     }).round(2)
     
-    performance.columns = ['montant_total', 'nombre_soumissions', 'montant_moyen', 'gammes_couvertes']
+    performance.columns = ['montant_total_ts', 'nombre_soumissions', 'montant_moyen', 'gammes_couvertes']
+    performance = performance.reset_index()
     
-    # Comparaison avec le marché
-    market_by_paillasse = data.groupby('paillasse')['montant soumission'].sum()
-    performance = performance.merge(market_by_paillasse, on='paillasse', suffixes=('_ts', '_marche'))
-    performance['part_marche'] = (performance['montant_total_ts'] / performance['montant soumission'] * 100).round(2)
+    # Montant total du marché par paillasse
+    market_by_paillasse = data.groupby('paillasse')['montant soumission'].sum().reset_index()
+    market_by_paillasse.columns = ['paillasse', 'montant_total_marche']
     
-    return performance.reset_index()
+    # Fusionner les données
+    performance = performance.merge(market_by_paillasse, on='paillasse', how='left')
+    
+    # Calculer la part de marché
+    performance['part_marche'] = (performance['montant_total_ts'] / performance['montant_total_marche'] * 100).round(2)
+    
+    return performance
 
 # ==================== SECTION 1: VUE D'ENSEMBLE ====================
 
@@ -425,8 +432,8 @@ elif section == "📈 Performance TS":
     if ts_performance.empty:
         st.warning("ℹ️ Technologies Services n'apparaît pas dans les données analysées.")
     else:
-        # KPIs TS
-        total_ts_amount = ts_performance['montant_total'].sum()
+        # KPIs TS - CORRECTION DES NOMS DE COLONNES
+        total_ts_amount = ts_performance['montant_total_ts'].sum()
         total_ts_submissions = ts_performance['nombre_soumissions'].sum()
         avg_market_share = ts_performance['part_marche'].mean()
         
@@ -441,16 +448,16 @@ elif section == "📈 Performance TS":
         with col3:
             st.metric("Part de Marché Moyenne", f"{avg_market_share:.1f}%")
         
-        # Performance par paillasse
+        # Performance par paillasse - CORRECTION DES NOMS DE COLONNES
         st.subheader("📊 Performance par Paillasse")
         
         col1, col2 = st.columns(2)
         
         with col1:
             fig_ts_performance = px.bar(
-                ts_performance.nlargest(10, 'montant_total'),
+                ts_performance.nlargest(10, 'montant_total_ts'),
                 x='paillasse',
-                y='montant_total',
+                y='montant_total_ts',
                 title="Top 10 Paillasses par CA TS"
             )
             st.plotly_chart(fig_ts_performance, use_container_width=True)
@@ -486,7 +493,6 @@ elif section == "📈 Performance TS":
                     st.write(f"• **{cat['paillasse']}** : {cat['part_marche']}% de part de marché")
             else:
                 st.write("Toutes les catégories ont une part de marché ≥ 10%")
-
 # ==================== SECTION 5: DONNÉES BRUTES ====================
 
 elif section == "📋 Données Brutes":
