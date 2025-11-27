@@ -209,6 +209,22 @@ def get_lots_non_positionnes_ts(data):
     
     return analysis
 
+def get_distributeur_paillasse_details(data, distributeur_selectionne):
+    """Détail des paillasses pour un distributeur avec les descriptions"""
+    dist_data = data[data['distributeur'] == distributeur_selectionne]
+    
+    # Grouper par paillasse et agréger les descriptions
+    detail_paillasse = dist_data.groupby('paillasse').agg({
+        'montant soumission': 'sum',
+        'description': lambda x: '<br>• '.join([''] + list(x.unique())),  # Format avec sauts de ligne
+        'marque': lambda x: ', '.join(x.unique())
+    }).reset_index()
+    
+    detail_paillasse.columns = ['paillasse', 'montant_total', 'descriptions', 'marques']
+    detail_paillasse = detail_paillasse.sort_values('montant_total', ascending=False)
+    
+    return detail_paillasse
+
 # ==================== SESSION STATE POUR LES COMMENTAIRES ====================
 
 if 'commentaires' not in st.session_state:
@@ -231,7 +247,7 @@ section = st.sidebar.radio(
 # ==================== SECTION 1: TABLEAU DE BORD ====================
 
 if section == "🎯 Tableau de Bord":
-    st.header("🎯 Tableau de Bord - Vue générale")
+    st.header("🎯 Tableau de Bord Direction Générale")
     
     # Métriques principales
     col1, col2, col3, col4 = st.columns(4)
@@ -260,7 +276,7 @@ if section == "🎯 Tableau de Bord":
     with col4:
         st.metric(
             "Rang TS (Montant)",
-            f"{kpis['rang_montant_ts']}",
+            f"{kpis['rang_montant_ts']}ème",
             help="Classement de TS par montant de soumission"
         )
     
@@ -374,14 +390,25 @@ elif section == "📊 Analyse par Distributeur":
         with col3:
             st.metric("Paillasses Couvertes", f"{dist_data['paillasse'].nunique()}")
         
-        # Détail par paillasse
-        st.write("**Détail par Paillasse:**")
-        detail_paillasse = dist_data.groupby('paillasse').agg({
-            'montant soumission': 'sum',
-            'description': 'count'
-        }).reset_index()
+        # Détail par paillasse avec descriptions - NOUVELLE FONCTIONNALITÉ
+        st.subheader("📋 Détail par Paillasse avec Descriptions")
         
-        st.dataframe(detail_paillasse, use_container_width=True)
+        detail_paillasse = get_distributeur_paillasse_details(df, selected_distributeur)
+        
+        # Afficher avec formatage pour les descriptions longues
+        for _, row in detail_paillasse.iterrows():
+            with st.expander(f"🏥 {row['paillasse']} - {row['montant_total']:,.0f} FCFA"):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write(f"**Montant total :** {row['montant_total']:,.0f} FCFA")
+                    st.write(f"**Marques :** {row['marques']}")
+                
+                with col2:
+                    st.write("**Descriptions des lots :**")
+                    # Afficher les descriptions avec un format lisible
+                    descriptions_html = f"<div style='max-height: 200px; overflow-y: auto; font-size: 0.9em;'>{row['descriptions']}</div>"
+                    st.markdown(descriptions_html, unsafe_allow_html=True)
 
 # ==================== SECTION 3: POSITIONNEMENT TS PAR PAILLASSE ====================
 
@@ -506,14 +533,14 @@ elif section == "🔍 Lots Non Positionnés":
         montant_opportunites = lots_non_positionnes['montant soumission'].sum()
         st.write(f"**Potentiel manqué estimé :** {montant_opportunites:,.0f} FCFA")
         
-        # Lots sans soumissionnaires - CORRECTION DE L'ERREUR
+        # Lots sans soumissionnaires
         lots_sans_soumission = df[df['distributeur'] == 'PAS DE SOUMISSIONNAIRE']
-        if not lots_sans_soumission.empty:  # CORRIGÉ : lots_sans_soumission au lieu de lots_sans_sans_soumission
+        if not lots_sans_soumission.empty:
             st.warning(f"⚠️ {len(lots_sans_soumission)} lots sans soumissionnaires identifiés")
             
             st.write("**Lots sans soumissionnaires:**")
             st.dataframe(
-                lots_sans_soumission[['description', 'paillasse', 'montant soumission']],  # CORRIGÉ : description au lieu de gamme
+                lots_sans_soumission[['description', 'paillasse', 'montant soumission']],
                 use_container_width=True
             )
 
