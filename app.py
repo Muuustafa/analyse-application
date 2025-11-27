@@ -93,6 +93,8 @@ def calculate_kpis(data):
     # Données TS
     ts_data = data[data['distributeur'] == TS_NAME]
     montant_total_ts = ts_data['montant soumission'].sum()
+    
+    # NOUVEL INDICATEUR : Pourcentage de TS dans le marché
     pourcentage_marche_ts = (montant_total_ts / montant_total_marche * 100) if montant_total_marche > 0 else 0
     
     # Calcul du rang de TS
@@ -118,16 +120,14 @@ def calculate_kpis(data):
     # Lots sans soumissionnaires
     lots_avec_soumission = set(data[data['distributeur'] != 'PAS DE SOUMISSIONNAIRE']['description'].unique())
     lots_sans_soumission = tous_les_lots - lots_avec_soumission
-
-
     
     return {
         'total_soumissionnaires': total_soumissionnaires,
         'montant_total_marche': montant_total_marche,
         'montant_total_ts': montant_total_ts,
+        'pourcentage_marche_ts': pourcentage_marche_ts,  # NOUVEAU KPI
         'rang_montant_ts': rang_montant_ts,
         'rang_nombre_ts': rang_nombre_ts,
-        'pourcentage_marche_ts': pourcentage_marche_ts,
         'total_lots': total_lots,
         'lots_ts_soumissionne': lots_ts_soumissionne,
         'lots_attribues_ts': lots_attribues_ts,
@@ -275,10 +275,10 @@ if section == "🎯 Tableau de Bord":
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-         st.metric(
-            "Total Lots/Sous-lots",
-            f"{kpis['total_lots']}",
-            help="Nombre total de lots et sous-lots dans l'appel d'offre"
+        st.metric(
+            "Soumissionnaires Total",
+            f"{kpis['total_soumissionnaires']}",
+            help="Nombre total de distributeurs ayant soumissionné"
         )
     
     with col2:
@@ -297,29 +297,36 @@ if section == "🎯 Tableau de Bord":
     
     with col4:
         st.metric(
+            "Part de Marché TS",
+            f"{kpis['pourcentage_marche_ts']:.1f}%",
+            help="Pourcentage du marché détenu par Technologies Services"
+        )
+    
+    # Deuxième ligne de métriques
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
             "Rang TS (Montant)",
             f"{kpis['rang_montant_ts']}ème",
             help="Classement de TS par montant de soumission"
         )
     
-    # Deuxième ligne de métriques
-    col1, col2, col3, col4, col5 = st.columns(4)
+    with col2:
+        st.metric(
+            "Total Lots/Sous-lots",
+            f"{kpis['total_lots']}",
+            help="Nombre total de lots et sous-lots dans l'appel d'offre"
+        )
     
-    with col1:
-         st.metric(
+    with col3:
+        st.metric(
             "Lots Soumissionnés TS",
             f"{kpis['lots_ts_soumissionne']}",
             help="Nombre de lots où TS a soumissionné"
         )
     
-    with col2:
-        st.metric(
-            "Soumissionnaires Total",
-            f"{kpis['total_soumissionnaires']}",
-            help="Nombre total de distributeurs ayant soumissionné"
-        )
-    
-    with col3:
+    with col4:
         st.metric(
             "Lots Attribués à TS",
             f"{kpis['lots_attribues_ts']}",
@@ -327,20 +334,23 @@ if section == "🎯 Tableau de Bord":
             help="Lots attribués à Technologies Services"
         )
     
-    with col4:
+    # Troisième ligne de métriques
+    col1, col2 = st.columns(2)
+    
+    with col1:
         st.metric(
             "Lots Non Positionnés TS",
             f"{kpis['lots_non_positionnes_ts']}",
             help="Lots où TS ne s'est pas positionné"
         )
-        
-    with col5:
+    
+    with col2:
         st.metric(
-            "Part de Marché TS",
-            f"{kpis['pourcentage_marche_ts']:.1f}%",
-            help="Pourcentage du marché détenu par Technologies Services"
+            "Rang TS (Nombre)",
+            f"{kpis['rang_nombre_ts']}ème",
+            help="Classement de TS par nombre de soumissions"
         )
-        
+    
     # Visualisations
     st.subheader("📈 Vue d'Ensemble du Marché")
     
