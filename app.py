@@ -190,6 +190,22 @@ def get_paillasse_detail(data, paillasse_selectionnee):
     
     return distributeurs
 
+def get_distributeur_paillasse_details(data, distributeur_selectionne):
+    """Détail des paillasses pour un distributeur avec les descriptions"""
+    dist_data = data[data['distributeur'] == distributeur_selectionne]
+    
+    # Grouper par paillasse et agréger les descriptions
+    detail_paillasse = dist_data.groupby('paillasse').agg({
+        'montant soumission': 'sum',
+        'description': lambda x: '<br>• '.join([''] + list(x.unique())),  # Format avec sauts de ligne
+        'marque': lambda x: ', '.join(x.unique())
+    }).reset_index()
+    
+    detail_paillasse.columns = ['paillasse', 'montant_total', 'descriptions', 'marques']
+    detail_paillasse = detail_paillasse.sort_values('montant_total', ascending=False)
+    
+    return detail_paillasse
+
 def get_lots_non_positionnes_ts(data):
     """Lots où TS ne s'est pas positionné"""
     tous_les_lots = set(data['description'].unique())
@@ -209,21 +225,23 @@ def get_lots_non_positionnes_ts(data):
     
     return analysis
 
-def get_distributeur_paillasse_details(data, distributeur_selectionne):
-    """Détail des paillasses pour un distributeur avec les descriptions"""
-    dist_data = data[data['distributeur'] == distributeur_selectionne]
+def get_detail_distributeurs_lot(data, description_lot):
+    """Détail des distributeurs pour un lot spécifique"""
+    lot_data = data[data['description'] == description_lot]
     
-    # Grouper par paillasse et agréger les descriptions
-    detail_paillasse = dist_data.groupby('paillasse').agg({
+    # Analyse par distributeur pour ce lot
+    distributeurs_detail = lot_data.groupby('distributeur').agg({
         'montant soumission': 'sum',
-        'description': lambda x: '<br>• '.join([''] + list(x.unique())),  # Format avec sauts de ligne
-        'marque': lambda x: ', '.join(x.unique())
+        'marque': 'first',
+        'modele': 'first'
     }).reset_index()
     
-    detail_paillasse.columns = ['paillasse', 'montant_total', 'descriptions', 'marques']
-    detail_paillasse = detail_paillasse.sort_values('montant_total', ascending=False)
+    distributeurs_detail = distributeurs_detail.sort_values('montant soumission', ascending=False)
     
-    return detail_paillasse
+    # Calcul du total
+    total_montant = distributeurs_detail['montant soumission'].sum()
+    
+    return distributeurs_detail, total_montant
 
 # ==================== SESSION STATE POUR LES COMMENTAIRES ====================
 
@@ -254,9 +272,9 @@ if section == "🎯 Tableau de Bord":
     
     with col1:
         st.metric(
-            "Soumissionnaires Total",
-            f"{kpis['total_soumissionnaires']}",
-            help="Nombre total de distributeurs ayant soumissionné"
+            "Lots Soumissionnés TS",
+            f"{kpis['lots_ts_soumissionne']}",
+            help="Nombre de lots où TS a soumissionné"
         )
     
     with col2:
@@ -292,9 +310,9 @@ if section == "🎯 Tableau de Bord":
     
     with col2:
         st.metric(
-            "Lots Soumissionnés TS",
-            f"{kpis['lots_ts_soumissionne']}",
-            help="Nombre de lots où TS a soumissionné"
+            "Soumissionnaires Total",
+            f"{kpis['total_soumissionnaires']}",
+            help="Nombre total de distributeurs ayant soumissionné"
         )
     
     with col3:
@@ -390,7 +408,7 @@ elif section == "📊 Analyse par Distributeur":
         with col3:
             st.metric("Paillasses Couvertes", f"{dist_data['paillasse'].nunique()}")
         
-        # Détail par paillasse avec descriptions - NOUVELLE FONCTIONNALITÉ
+        # Détail par paillasse avec descriptions
         st.subheader("📋 Détail par Paillasse avec Descriptions")
         
         detail_paillasse = get_distributeur_paillasse_details(df, selected_distributeur)
@@ -515,17 +533,32 @@ elif section == "🔍 Lots Non Positionnés":
         
         st.subheader("📋 Liste des Lots Non Positionnés")
         
-        st.dataframe(
-            lots_non_positionnes,
-            column_config={
-                'description': 'Lot/Sous-lot',
-                'paillasse': 'Paillasse',
-                'distributeur': 'Distributeurs Présents',
-                'montant soumission': st.column_config.NumberColumn('Montant (FCFA)', format='%d FCFA'),
-                'attribution': 'Attribué à'
-            },
-            use_container_width=True
-        )
+        # Afficher chaque lot avec le détail des distributeurs
+        for _, lot in lots_non_positionnes.iterrows():
+            with st.expander(f"📦 {lot['description']} - {lot['montant soumission']:,.0f} FCFA - {lot['paillasse']}"):
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write(f"**Paillasse :** {lot['paillasse']}")
+                    st.write(f"**Attribué à :** {lot['attribution']}")
+                    st.write(f"**Montant total du lot :** {lot['montant soumission']:,.0f} FCFA")
+                
+                with col2:
+                    # Récupérer le détail des distributeurs pour ce lot
+                    distributeurs_detail, total_montant = get_detail_distributeurs_lot(df, lot['description'])
+                    
+                    st.write("**Détail par distributeur :**")
+                    
+                    # Afficher le tableau des distributeurs
+                    for _, dist in distributeurs_detail.iterrows():
+                        st.write(f"• **{dist['distributeur']}** : {dist['montant soumission']:,.0f} FCFA")
+                        if pd.notna(dist['marque']) and dist['marque'] != 'NAN':
+                            st.write(f"  _Marque : {dist['marque']}_")
+                        if pd.notna(dist['modele']) and dist['modele'] != 'NAN':
+                            st.write(f"  _Modèle : {dist['modele']}_")
+                    
+                    st.write(f"**Total des soumissions :** {total_montant:,.0f} FCFA")
         
         # Analyse des opportunités manquées
         st.subheader("💡 Analyse des Opportunités")
