@@ -6,13 +6,13 @@ from datetime import datetime
 
 # Configuration de la page
 st.set_page_config(
-    page_title="Dashboard - Technologies Services",
+    page_title="Dashboard DG - Technologies Services",
     page_icon="🏥",
     layout="wide"
 )
 
 # Titre principal
-st.title("🏥 Tableau de Bord")
+st.title("🏥 Tableau de Bord Direction Générale")
 st.markdown("**Technologies Services - Analyse des Appels d'Offres**")
 st.markdown("---")
 
@@ -29,7 +29,7 @@ def load_and_clean_data(uploaded_file):
         df.columns = [col.strip().lower() for col in df.columns]
         
         # Standardiser les textes en majuscules
-        text_columns = ['paillasse', 'gamme', 'modele', 'marque', 'distributeur', 'attribution', 'reference']
+        text_columns = ['paillasse', 'description', 'modele', 'marque', 'distributeur', 'attribution', 'reference']
         for col in text_columns:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.upper().str.strip()
@@ -49,7 +49,7 @@ st.sidebar.header("📁 Chargement des données")
 uploaded_file = st.sidebar.file_uploader(
     "Choisissez le fichier Excel des appels d'offres",
     type=["xlsx", "xls"],
-    help="Fichier avec les colonnes: paillasse, gamme, modele, marque, distributeur, montant soumission, attribution, reference"
+    help="Fichier avec les colonnes: paillasse, description, modele, marque, distributeur, montant soumission, attribution, reference"
 )
 
 # Charger les données d'exemple si aucun fichier uploadé
@@ -57,7 +57,7 @@ if not uploaded_file:
     st.info("""
     ### 📋 Instructions
     Veuillez uploader un fichier Excel avec les colonnes suivantes:
-    - **paillasse, gamme, modele, marque, distributeur, montant soumission, attribution, reference**
+    - **paillasse, description, modele, marque, distributeur, montant soumission, attribution, reference**
     
     L'analyse présentera les indicateurs clés pour Technologies Services.
     """)
@@ -72,7 +72,7 @@ with st.spinner("Chargement et analyse des données..."):
         st.stop()
 
 # Vérification des colonnes requises
-required_columns = ['paillasse', 'gamme', 'distributeur', 'montant soumission', 'attribution', 'reference']
+required_columns = ['paillasse', 'description', 'distributeur', 'montant soumission', 'attribution', 'reference']
 missing_columns = [col for col in required_columns if col not in df.columns]
 if missing_columns:
     st.error(f"❌ Colonnes manquantes: {', '.join(missing_columns)}")
@@ -96,26 +96,26 @@ def calculate_kpis(data):
     
     # Calcul du rang de TS
     distributeurs_montant = data.groupby('distributeur')['montant soumission'].sum().sort_values(ascending=False)
-    distributeurs_count = data.groupby('distributeur')['gamme'].count().sort_values(ascending=False)
+    distributeurs_count = data.groupby('distributeur')['description'].count().sort_values(ascending=False)
     
     rang_montant_ts = distributeurs_montant.index.get_loc(TS_NAME) + 1 if TS_NAME in distributeurs_montant.index else 0
     rang_nombre_ts = distributeurs_count.index.get_loc(TS_NAME) + 1 if TS_NAME in distributeurs_count.index else 0
     
     # Lots et sous-lots
-    total_lots = data['gamme'].nunique()
-    lots_ts_soumissionne = ts_data['gamme'].nunique()
+    total_lots = data['description'].nunique()
+    lots_ts_soumissionne = ts_data['description'].nunique()
     
     # Lots attribués à TS
-    lots_attribues_ts = data[data['attribution'] == TS_NAME]['gamme'].nunique()
+    lots_attribues_ts = data[data['attribution'] == TS_NAME]['description'].nunique()
     pourcentage_attribution_ts = (lots_attribues_ts / total_lots * 100) if total_lots > 0 else 0
     
     # Lots non positionnés par TS
-    tous_les_lots = set(data['gamme'].unique())
-    lots_ts = set(ts_data['gamme'].unique())
+    tous_les_lots = set(data['description'].unique())
+    lots_ts = set(ts_data['description'].unique())
     lots_non_positionnes_ts = tous_les_lots - lots_ts
     
     # Lots sans soumissionnaires
-    lots_avec_soumission = set(data[data['distributeur'] != 'Pas de soumissionnaires']['gamme'].unique())
+    lots_avec_soumission = set(data[data['distributeur'] != 'PAS DE SOUMISSIONNAIRE']['description'].unique())
     lots_sans_soumission = tous_les_lots - lots_avec_soumission
     
     return {
@@ -140,7 +140,7 @@ def get_distributeurs_analysis(data):
     """Analyse détaillée par distributeur"""
     analysis = data.groupby('distributeur').agg({
         'montant soumission': ['sum', 'count'],
-        'gamme': 'nunique',
+        'description': 'nunique',
         'paillasse': 'nunique'
     }).round(0)
     
@@ -162,7 +162,7 @@ def get_ts_paillasse_analysis(data):
     
     analysis = ts_data.groupby('paillasse').agg({
         'montant soumission': ['sum', 'count'],
-        'gamme': 'nunique'
+        'description': 'nunique'
     }).round(0)
     
     analysis.columns = ['montant_total', 'nombre_soumissions', 'lots_couverts']
@@ -181,7 +181,7 @@ def get_paillasse_detail(data, paillasse_selectionnee):
     # Analyse par distributeur
     distributeurs = paillasse_data.groupby('distributeur').agg({
         'montant soumission': 'sum',
-        'gamme': 'count',
+        'description': 'count',
         'marque': lambda x: ', '.join(x.unique())
     }).reset_index()
     
@@ -192,15 +192,15 @@ def get_paillasse_detail(data, paillasse_selectionnee):
 
 def get_lots_non_positionnes_ts(data):
     """Lots où TS ne s'est pas positionné"""
-    tous_les_lots = set(data['gamme'].unique())
-    lots_ts = set(data[data['distributeur'] == TS_NAME]['gamme'].unique())
+    tous_les_lots = set(data['description'].unique())
+    lots_ts = set(data[data['distributeur'] == TS_NAME]['description'].unique())
     lots_non_positionnes = tous_les_lots - lots_ts
     
     # Récupérer les données de ces lots
-    lots_data = data[data['gamme'].isin(lots_non_positionnes)]
+    lots_data = data[data['description'].isin(lots_non_positionnes)]
     
     # Garder une ligne par lot avec le distributeur principal
-    analysis = lots_data.groupby('gamme').agg({
+    analysis = lots_data.groupby('description').agg({
         'paillasse': 'first',
         'distributeur': lambda x: ', '.join(x.unique()),
         'montant soumission': 'sum',
@@ -369,7 +369,7 @@ elif section == "📊 Analyse par Distributeur":
             st.metric("Montant Total", f"{dist_data['montant soumission'].sum():,.0f} FCFA")
         
         with col2:
-            st.metric("Nombre de Lots", f"{dist_data['gamme'].nunique()}")
+            st.metric("Nombre de Lots", f"{dist_data['description'].nunique()}")
         
         with col3:
             st.metric("Paillasses Couvertes", f"{dist_data['paillasse'].nunique()}")
@@ -378,7 +378,7 @@ elif section == "📊 Analyse par Distributeur":
         st.write("**Détail par Paillasse:**")
         detail_paillasse = dist_data.groupby('paillasse').agg({
             'montant soumission': 'sum',
-            'gamme': 'count'
+            'description': 'count'
         }).reset_index()
         
         st.dataframe(detail_paillasse, use_container_width=True)
@@ -491,7 +491,7 @@ elif section == "🔍 Lots Non Positionnés":
         st.dataframe(
             lots_non_positionnes,
             column_config={
-                'gamme': 'Lot/Sous-lot',
+                'description': 'Lot/Sous-lot',
                 'paillasse': 'Paillasse',
                 'distributeur': 'Distributeurs Présents',
                 'montant soumission': st.column_config.NumberColumn('Montant (FCFA)', format='%d FCFA'),
@@ -506,14 +506,14 @@ elif section == "🔍 Lots Non Positionnés":
         montant_opportunites = lots_non_positionnes['montant soumission'].sum()
         st.write(f"**Potentiel manqué estimé :** {montant_opportunites:,.0f} FCFA")
         
-        # Lots sans soumissionnaires
+        # Lots sans soumissionnaires - CORRECTION DE L'ERREUR
         lots_sans_soumission = df[df['distributeur'] == 'PAS DE SOUMISSIONNAIRE']
-        if not lots_sans_sans_soumission.empty:
+        if not lots_sans_soumission.empty:  # CORRIGÉ : lots_sans_soumission au lieu de lots_sans_sans_soumission
             st.warning(f"⚠️ {len(lots_sans_soumission)} lots sans soumissionnaires identifiés")
             
             st.write("**Lots sans soumissionnaires:**")
             st.dataframe(
-                lots_sans_soumission[['gamme', 'paillasse', 'montant soumission']],
+                lots_sans_soumission[['description', 'paillasse', 'montant soumission']],  # CORRIGÉ : description au lieu de gamme
                 use_container_width=True
             )
 
