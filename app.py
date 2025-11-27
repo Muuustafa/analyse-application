@@ -231,7 +231,7 @@ section = st.sidebar.radio(
 # ==================== SECTION 1: TABLEAU DE BORD ====================
 
 if section == "🎯 Tableau de Bord":
-    st.header("🎯 Tableau de Bord Direction Générale")
+    st.header("🎯 Tableau de Bord - Vue générale")
     
     # Métriques principales
     col1, col2, col3, col4 = st.columns(4)
@@ -260,7 +260,7 @@ if section == "🎯 Tableau de Bord":
     with col4:
         st.metric(
             "Rang TS (Montant)",
-            f"{kpis['rang_montant_ts']}ème",
+            f"{kpis['rang_montant_ts']}",
             help="Classement de TS par montant de soumission"
         )
     
