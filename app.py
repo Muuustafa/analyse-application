@@ -335,12 +335,12 @@ if section == "🎯 Tableau de Bord":
         )
         
     with col5:
-    st.metric(
-        "Part de Marché TS",
-        f"{kpis['pourcentage_marche_ts']:.1f}%",
-        help="Pourcentage du marché détenu par Technologies Services"
-    )
-    
+        st.metric(
+            "Part de Marché TS",
+            f"{kpis['pourcentage_marche_ts']:.1f}%",
+            help="Pourcentage du marché détenu par Technologies Services"
+        )
+        
     # Visualisations
     st.subheader("📈 Vue d'Ensemble du Marché")
     
