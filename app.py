@@ -6,13 +6,13 @@ from datetime import datetime
 
 # Configuration de la page
 st.set_page_config(
-    page_title="Dashboard DG - Technologies Services",
+    page_title="Dashboard - Technologies Services",
     page_icon="🏥",
     layout="wide"
 )
 
 # Titre principal
-st.title("🏥 Tableau de Bord Direction Générale")
+st.title("🏥 Tableau de Bord")
 st.markdown("**Technologies Services - Analyse des Appels d'Offres**")
 st.markdown("---")
 
@@ -115,7 +115,7 @@ def calculate_kpis(data):
     lots_non_positionnes_ts = tous_les_lots - lots_ts
     
     # Lots sans soumissionnaires
-    lots_avec_soumission = set(data[data['distributeur'] != 'PAS DE SOUMISSIONNAIRE']['gamme'].unique())
+    lots_avec_soumission = set(data[data['distributeur'] != 'Pas de soumissionnaires']['gamme'].unique())
     lots_sans_soumission = tous_les_lots - lots_avec_soumission
     
     return {
