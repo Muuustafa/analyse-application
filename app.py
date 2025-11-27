@@ -2,17 +2,18 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from datetime import datetime
 
 # Configuration de la page
 st.set_page_config(
-    page_title="Analyse Part de Marché - Technologies Services",
+    page_title="Dashboard DG - Technologies Services",
     page_icon="🏥",
     layout="wide"
 )
 
 # Titre principal
-st.title("🏥 Analyse Stratégique - Technologies Services")
-st.markdown("**Part de Marché et Positionnement Concurrentiel**")
+st.title("🏥 Tableau de Bord Direction Générale")
+st.markdown("**Technologies Services - Analyse des Appels d'Offres**")
 st.markdown("---")
 
 # Fonction pour charger et nettoyer les données
@@ -28,7 +29,7 @@ def load_and_clean_data(uploaded_file):
         df.columns = [col.strip().lower() for col in df.columns]
         
         # Standardiser les textes en majuscules
-        text_columns = ['paillasse', 'gamme', 'modele', 'marque', 'distributeur']
+        text_columns = ['paillasse', 'gamme', 'modele', 'marque', 'distributeur', 'attribution', 'reference']
         for col in text_columns:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.upper().str.strip()
@@ -36,10 +37,6 @@ def load_and_clean_data(uploaded_file):
         # Nettoyer les montants
         if 'montant soumission' in df.columns:
             df['montant soumission'] = pd.to_numeric(df['montant soumission'], errors='coerce').fillna(0)
-        
-        # Supprimer les lignes sans distributeur ou sans montant
-        df = df[df['distributeur'].notna() & (df['distributeur'] != 'NAN')]
-        df = df[df['montant soumission'] > 0]
         
         return df
         
@@ -50,9 +47,9 @@ def load_and_clean_data(uploaded_file):
 # Section d'upload
 st.sidebar.header("📁 Chargement des données")
 uploaded_file = st.sidebar.file_uploader(
-    "Choisissez le fichier Excel",
+    "Choisissez le fichier Excel des appels d'offres",
     type=["xlsx", "xls"],
-    help="Fichier avec les colonnes: paillasse, gamme, modele, marque, distributeur, montant soumission"
+    help="Fichier avec les colonnes: paillasse, gamme, modele, marque, distributeur, montant soumission, attribution, reference"
 )
 
 # Charger les données d'exemple si aucun fichier uploadé
@@ -60,9 +57,9 @@ if not uploaded_file:
     st.info("""
     ### 📋 Instructions
     Veuillez uploader un fichier Excel avec les colonnes suivantes:
-    - **paillasse, gamme, modele, marque, distributeur, montant soumission**
+    - **paillasse, gamme, modele, marque, distributeur, montant soumission, attribution, reference**
     
-    L'analyse se concentrera sur Technologies Services et ses concurrents.
+    L'analyse présentera les indicateurs clés pour Technologies Services.
     """)
     st.stop()
 
@@ -75,424 +72,451 @@ with st.spinner("Chargement et analyse des données..."):
         st.stop()
 
 # Vérification des colonnes requises
-required_columns = ['paillasse', 'gamme', 'distributeur', 'montant soumission']
+required_columns = ['paillasse', 'gamme', 'distributeur', 'montant soumission', 'attribution', 'reference']
 missing_columns = [col for col in required_columns if col not in df.columns]
 if missing_columns:
     st.error(f"❌ Colonnes manquantes: {', '.join(missing_columns)}")
     st.stop()
 
-# Importer BidAnalyzer après le chargement des données pour éviter les erreurs circulaires
-from analysis.bid_analysis import BidAnalyzer
+# Initialisation
+TS_NAME = "TECHNOLOGIES SERVICES"
 
-# Initialiser l'analyseur
-analyzer = BidAnalyzer(df)
+# ==================== CALCULS DES INDICATEURS CLÉS ====================
 
-# Navigation
-st.sidebar.header("📊 Navigation")
-section = st.sidebar.radio(
-    "Sélectionnez une analyse:",
-    ["🎯 Vue d'Ensemble", "📊 Par Paillasse", "⚔️ Analyse Concurrentielle", "📈 Performance TS", "📋 Données Brutes"]
-)
+def calculate_kpis(data):
+    """Calcule tous les indicateurs clés demandés par le DG"""
+    
+    # Indicateurs généraux
+    total_soumissionnaires = data['distributeur'].nunique()
+    montant_total_marche = data['montant soumission'].sum()
+    
+    # Données TS
+    ts_data = data[data['distributeur'] == TS_NAME]
+    montant_total_ts = ts_data['montant soumission'].sum()
+    
+    # Calcul du rang de TS
+    distributeurs_montant = data.groupby('distributeur')['montant soumission'].sum().sort_values(ascending=False)
+    distributeurs_count = data.groupby('distributeur')['gamme'].count().sort_values(ascending=False)
+    
+    rang_montant_ts = distributeurs_montant.index.get_loc(TS_NAME) + 1 if TS_NAME in distributeurs_montant.index else 0
+    rang_nombre_ts = distributeurs_count.index.get_loc(TS_NAME) + 1 if TS_NAME in distributeurs_count.index else 0
+    
+    # Lots et sous-lots
+    total_lots = data['gamme'].nunique()
+    lots_ts_soumissionne = ts_data['gamme'].nunique()
+    
+    # Lots attribués à TS
+    lots_attribues_ts = data[data['attribution'] == TS_NAME]['gamme'].nunique()
+    pourcentage_attribution_ts = (lots_attribues_ts / total_lots * 100) if total_lots > 0 else 0
+    
+    # Lots non positionnés par TS
+    tous_les_lots = set(data['gamme'].unique())
+    lots_ts = set(ts_data['gamme'].unique())
+    lots_non_positionnes_ts = tous_les_lots - lots_ts
+    
+    # Lots sans soumissionnaires
+    lots_avec_soumission = set(data[data['distributeur'] != 'PAS DE SOUMISSIONNAIRE']['gamme'].unique())
+    lots_sans_soumission = tous_les_lots - lots_avec_soumission
+    
+    return {
+        'total_soumissionnaires': total_soumissionnaires,
+        'montant_total_marche': montant_total_marche,
+        'montant_total_ts': montant_total_ts,
+        'rang_montant_ts': rang_montant_ts,
+        'rang_nombre_ts': rang_nombre_ts,
+        'total_lots': total_lots,
+        'lots_ts_soumissionne': lots_ts_soumissionne,
+        'lots_attribues_ts': lots_attribues_ts,
+        'pourcentage_attribution_ts': pourcentage_attribution_ts,
+        'lots_non_positionnes_ts': len(lots_non_positionnes_ts),
+        'lots_sans_soumission': len(lots_sans_soumission),
+        'distributeurs_montant': distributeurs_montant,
+        'distributeurs_count': distributeurs_count
+    }
 
 # ==================== FONCTIONS D'ANALYSE ====================
 
-def calculate_market_share(data):
-    """Calcule la part de marché globale"""
-    total_market = data['montant soumission'].sum()
-    ts_data = data[data['distributeur'] == 'TECHNOLOGIES SERVICES']
-    ts_total = ts_data['montant soumission'].sum()
-    
-    ts_market_share = (ts_total / total_market * 100) if total_market > 0 else 0
-    
-    return {
-        'total_marche': total_market,
-        'total_ts': ts_total,
-        'part_marche_ts': ts_market_share,
-        'nombre_soumissions_ts': len(ts_data),
-        'nombre_soumissions_total': len(data)
-    }
-
-def analyze_by_paillasse(data):
-    """Analyse détaillée par paillasse"""
-    analysis = data.groupby('paillasse').agg({
-        'montant soumission': ['sum', 'count', 'mean'],
-        'distributeur': 'nunique'
-    }).round(2)
-    
-    analysis.columns = ['montant_total', 'nombre_soumissions', 'montant_moyen', 'nombre_distributeurs']
-    
-    # Calcul de la part de TS par paillasse
-    ts_by_paillasse = data[data['distributeur'] == 'TECHNOLOGIES SERVICES'].groupby('paillasse').agg({
-        'montant soumission': 'sum',
-        'gamme': 'count'
-    })
-    
-    ts_by_paillasse.columns = ['montant_ts', 'soumissions_ts']
-    
-    analysis = analysis.merge(ts_by_paillasse, on='paillasse', how='left').fillna(0)
-    analysis['part_marche_ts'] = (analysis['montant_ts'] / analysis['montant_total'] * 100).round(2)
-    
-    return analysis.reset_index()
-
-def get_competitors_analysis(data):
-    """Analyse des concurrents principaux"""
-    competitors = data[data['distributeur'] != 'TECHNOLOGIES SERVICES']
-    competitor_stats = competitors.groupby('distributeur').agg({
+def get_distributeurs_analysis(data):
+    """Analyse détaillée par distributeur"""
+    analysis = data.groupby('distributeur').agg({
         'montant soumission': ['sum', 'count'],
-        'paillasse': 'nunique',
-        'gamme': 'nunique'
-    }).round(2)
+        'gamme': 'nunique',
+        'paillasse': 'nunique'
+    }).round(0)
     
-    competitor_stats.columns = ['montant_total', 'nombre_soumissions', 'paillasses_couvertes', 'gammes_couvertes']
-    competitor_stats['part_marche'] = (competitor_stats['montant_total'] / data['montant soumission'].sum() * 100).round(2)
+    analysis.columns = ['montant_total', 'nombre_soumissions', 'lots_couverts', 'paillasses_couvertes']
+    analysis = analysis.reset_index()
     
-    return competitor_stats.reset_index().sort_values('montant_total', ascending=False)
+    # Calcul des pourcentages
+    total_montant = data['montant soumission'].sum()
+    analysis['pourcentage_montant'] = (analysis['montant_total'] / total_montant * 100).round(2)
+    
+    return analysis.sort_values('montant_total', ascending=False)
 
-def get_ts_performance_details(data):
-    """Détails de performance de TS - CORRIGÉ"""
-    ts_data = data[data['distributeur'] == 'TECHNOLOGIES SERVICES']
+def get_ts_paillasse_analysis(data):
+    """Analyse des paillasses où TS s'est positionné"""
+    ts_data = data[data['distributeur'] == TS_NAME]
     
     if ts_data.empty:
         return pd.DataFrame()
     
-    # Performance de TS par paillasse
-    performance = ts_data.groupby('paillasse').agg({
-        'montant soumission': ['sum', 'count', 'mean'],
+    analysis = ts_data.groupby('paillasse').agg({
+        'montant soumission': ['sum', 'count'],
         'gamme': 'nunique'
-    }).round(2)
+    }).round(0)
     
-    performance.columns = ['montant_total_ts', 'nombre_soumissions', 'montant_moyen', 'gammes_couvertes']
-    performance = performance.reset_index()
+    analysis.columns = ['montant_total', 'nombre_soumissions', 'lots_couverts']
+    analysis = analysis.reset_index()
     
-    # Montant total du marché par paillasse
-    market_by_paillasse = data.groupby('paillasse')['montant soumission'].sum().reset_index()
-    market_by_paillasse.columns = ['paillasse', 'montant_total_marche']
+    # Calcul du pourcentage par rapport au total TS
+    total_ts = ts_data['montant soumission'].sum()
+    analysis['pourcentage_ts'] = (analysis['montant_total'] / total_ts * 100).round(2)
     
-    # Fusionner les données
-    performance = performance.merge(market_by_paillasse, on='paillasse', how='left')
-    
-    # Calculer la part de marché
-    performance['part_marche'] = (performance['montant_total_ts'] / performance['montant_total_marche'] * 100).round(2)
-    
-    return performance
+    return analysis.sort_values('montant_total', ascending=False)
 
-# ==================== SECTION 1: VUE D'ENSEMBLE ====================
+def get_paillasse_detail(data, paillasse_selectionnee):
+    """Détail d'une paillasse spécifique"""
+    paillasse_data = data[data['paillasse'] == paillasse_selectionnee]
+    
+    # Analyse par distributeur
+    distributeurs = paillasse_data.groupby('distributeur').agg({
+        'montant soumission': 'sum',
+        'gamme': 'count',
+        'marque': lambda x: ', '.join(x.unique())
+    }).reset_index()
+    
+    distributeurs.columns = ['distributeur', 'montant_total', 'nombre_lots', 'marques']
+    distributeurs = distributeurs.sort_values('montant_total', ascending=False)
+    
+    return distributeurs
 
-if section == "🎯 Vue d'Ensemble":
-    st.header("🎯 Vue d'Ensemble du Marché")
+def get_lots_non_positionnes_ts(data):
+    """Lots où TS ne s'est pas positionné"""
+    tous_les_lots = set(data['gamme'].unique())
+    lots_ts = set(data[data['distributeur'] == TS_NAME]['gamme'].unique())
+    lots_non_positionnes = tous_les_lots - lots_ts
     
-    # Calcul des indicateurs clés
-    market_share = calculate_market_share(df)
-    ts_data = df[df['distributeur'] == 'TECHNOLOGIES SERVICES']
+    # Récupérer les données de ces lots
+    lots_data = data[data['gamme'].isin(lots_non_positionnes)]
     
-    # KPIs principaux
+    # Garder une ligne par lot avec le distributeur principal
+    analysis = lots_data.groupby('gamme').agg({
+        'paillasse': 'first',
+        'distributeur': lambda x: ', '.join(x.unique()),
+        'montant soumission': 'sum',
+        'attribution': 'first'
+    }).reset_index()
+    
+    return analysis
+
+# ==================== SESSION STATE POUR LES COMMENTAIRES ====================
+
+if 'commentaires' not in st.session_state:
+    st.session_state.commentaires = {}
+
+# ==================== CALCUL DES INDICATEURS ====================
+
+kpis = calculate_kpis(df)
+distributeurs_analysis = get_distributeurs_analysis(df)
+ts_paillasse_analysis = get_ts_paillasse_analysis(df)
+
+# Navigation
+st.sidebar.header("📊 Navigation")
+section = st.sidebar.radio(
+    "Sélectionnez une vue:",
+    ["🎯 Tableau de Bord", "📊 Analyse par Distributeur", "🏥 Positionnement TS par Paillasse", 
+     "🔍 Lots Non Positionnés", "📋 Données Brutes"]
+)
+
+# ==================== SECTION 1: TABLEAU DE BORD ====================
+
+if section == "🎯 Tableau de Bord":
+    st.header("🎯 Tableau de Bord Direction Générale")
+    
+    # Métriques principales
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric(
-            "Part de Marché TS",
-            f"{market_share['part_marche_ts']:.1f}%",
-            help="Part du chiffre d'affaires total détenue par Technologies Services"
+            "Soumissionnaires Total",
+            f"{kpis['total_soumissionnaires']}",
+            help="Nombre total de distributeurs ayant soumissionné"
         )
     
     with col2:
         st.metric(
-            "Chiffre d'Affaires TS",
-            f"{market_share['total_ts']:,.0f} FCFA",
-            help="Montant total des soumissions de Technologies Services"
+            "Montant Total Marché",
+            f"{kpis['montant_total_marche']:,.0f} FCFA",
+            help="Montant total de toutes les soumissions"
         )
     
     with col3:
         st.metric(
-            "Soumissions TS",
-            f"{market_share['nombre_soumissions_ts']}",
-            delta=f"{market_share['nombre_soumissions_ts']} soumissions"
+            "Montant Total TS",
+            f"{kpis['montant_total_ts']:,.0f} FCFA",
+            help="Montant total des soumissions de Technologies Services"
         )
     
     with col4:
-        participation_rate = (market_share['nombre_soumissions_ts'] / market_share['nombre_soumissions_total'] * 100)
         st.metric(
-            "Taux de Participation",
-            f"{participation_rate:.1f}%",
-            help="Pourcentage des soumissions auxquelles TS a participé"
+            "Rang TS (Montant)",
+            f"{kpis['rang_montant_ts']}ème",
+            help="Classement de TS par montant de soumission"
         )
     
-    # Graphique de part de marché
-    st.subheader("📊 Répartition du Marché")
+    # Deuxième ligne de métriques
+    col1, col2, col3, col4 = st.columns(4)
     
-    market_distribution = df.groupby('distributeur')['montant soumission'].sum().reset_index()
-    market_distribution = market_distribution.sort_values('montant soumission', ascending=False)
+    with col1:
+        st.metric(
+            "Total Lots/Sous-lots",
+            f"{kpis['total_lots']}",
+            help="Nombre total de lots et sous-lots dans l'appel d'offre"
+        )
     
-    # Grouper les petits distributeurs
-    top_distributors = market_distribution.head(8)
-    others = market_distribution[8:]['montant soumission'].sum()
+    with col2:
+        st.metric(
+            "Lots Soumissionnés TS",
+            f"{kpis['lots_ts_soumissionne']}",
+            help="Nombre de lots où TS a soumissionné"
+        )
     
-    if others > 0:
-        top_distributors = pd.concat([
-            top_distributors,
-            pd.DataFrame([{'distributeur': 'AUTRES', 'montant soumission': others}])
-        ])
+    with col3:
+        st.metric(
+            "Lots Attribués à TS",
+            f"{kpis['lots_attribues_ts']}",
+            delta=f"{kpis['pourcentage_attribution_ts']:.1f}%",
+            help="Lots attribués à Technologies Services"
+        )
     
-    fig_market_share = px.pie(
-        top_distributors,
-        values='montant soumission',
-        names='distributeur',
-        title="Répartition du Marché par Distributeur"
-    )
-    st.plotly_chart(fig_market_share, use_container_width=True)
+    with col4:
+        st.metric(
+            "Lots Non Positionnés TS",
+            f"{kpis['lots_non_positionnes_ts']}",
+            help="Lots où TS ne s'est pas positionné"
+        )
     
-    # Performance TS vs marché
-    st.subheader("📈 Performance TS vs Marché Global")
+    # Visualisations
+    st.subheader("📈 Vue d'Ensemble du Marché")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        # Top paillasses par montant
-        paillasse_analysis = analyze_by_paillasse(df)
-        top_paillasses = paillasse_analysis.nlargest(10, 'montant_total')
-        
-        fig_top_paillasses = px.bar(
-            top_paillasses,
-            x='paillasse',
-            y='montant_total',
-            title="Top 10 Paillasses par Montant Total"
-        )
-        st.plotly_chart(fig_top_paillasses, use_container_width=True)
-    
-    with col2:
-        # Part de marché TS par paillasse (top 10)
-        ts_paillasse = paillasse_analysis[paillasse_analysis['montant_ts'] > 0]
-        if not ts_paillasse.empty:
-            fig_ts_share = px.bar(
-                ts_paillasse.nlargest(10, 'part_marche_ts'),
-                x='paillasse',
-                y='part_marche_ts',
-                title="Top 10 Paillasses - Part de Marché TS"
-            )
-            st.plotly_chart(fig_ts_share, use_container_width=True)
-
-# ==================== SECTION 2: PAR PAILLASSE ====================
-
-elif section == "📊 Par Paillasse":
-    st.header("📊 Analyse Détailée par Paillasse")
-    
-    paillasse_analysis = analyze_by_paillasse(df)
-    
-    # Sélection de paillasse
-    selected_paillasse = st.selectbox(
-        "Sélectionnez une paillasse:",
-        options=paillasse_analysis['paillasse'].unique()
-    )
-    
-    if selected_paillasse:
-        # Données de la paillasse sélectionnée
-        paillasse_data = df[df['paillasse'] == selected_paillasse]
-        paillasse_stats = paillasse_analysis[paillasse_analysis['paillasse'] == selected_paillasse].iloc[0]
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric(
-                "Montant Total",
-                f"{paillasse_stats['montant_total']:,.0f} FCFA"
-            )
-        
-        with col2:
-            st.metric(
-                "Part de Marché TS",
-                f"{paillasse_stats['part_marche_ts']:.1f}%"
-            )
-        
-        with col3:
-            st.metric(
-                "Nombre de Soumissions",
-                f"{int(paillasse_stats['nombre_soumissions'])}"
-            )
-        
-        with col4:
-            st.metric(
-                "Distributeurs Actifs",
-                f"{int(paillasse_stats['nombre_distributeurs'])}"
-            )
-        
-        # Répartition par distributeur
-        st.subheader(f"📊 Répartition par Distributeur - {selected_paillasse}")
-        
-        distributor_share = paillasse_data.groupby('distributeur')['montant soumission'].sum().reset_index()
-        distributor_share = distributor_share.sort_values('montant soumission', ascending=False)
-        
-        fig_distributor = px.pie(
-            distributor_share,
-            values='montant soumission',
-            names='distributeur',
-            title=f"Répartition {selected_paillasse} par Distributeur"
-        )
-        st.plotly_chart(fig_distributor, use_container_width=True)
-        
-        # Gammes de la paillasse
-        st.subheader(f"🎯 Gammes - {selected_paillasse}")
-        
-        gammes_analysis = paillasse_data.groupby('gamme').agg({
-            'montant soumission': ['sum', 'count'],
-            'distributeur': 'nunique'
-        }).round(2)
-        
-        gammes_analysis.columns = ['montant_total', 'nombre_soumissions', 'nombre_distributeurs']
-        gammes_analysis = gammes_analysis.reset_index().sort_values('montant_total', ascending=False)
-        
-        st.dataframe(gammes_analysis, use_container_width=True)
-
-# ==================== SECTION 3: ANALYSE CONCURRENTIELLE ====================
-
-elif section == "⚔️ Analyse Concurrentielle":
-    st.header("⚔️ Analyse du Paysage Concurrentiel")
-    
-    competitors = get_competitors_analysis(df)
-    ts_market_share = calculate_market_share(df)
-    
-    # Top concurrents
-    st.subheader("🏆 Classement des Concurrents")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        fig_competitors_volume = px.bar(
-            competitors.head(10),
-            x='distributeur',
-            y='nombre_soumissions',
-            title="Top 10 Concurrents par Volume de Soumissions",
-            color='nombre_soumissions'
-        )
-        st.plotly_chart(fig_competitors_volume, use_container_width=True)
-    
-    with col2:
-        fig_competitors_amount = px.bar(
-            competitors.head(10),
+        # Top 10 distributeurs par montant
+        top_distributeurs = distributeurs_analysis.head(10)
+        fig_montant = px.bar(
+            top_distributeurs,
             x='distributeur',
             y='montant_total',
-            title="Top 10 Concurrents par Chiffre d'Affaires",
+            title="Top 10 Distributeurs par Montant",
             color='montant_total'
         )
-        st.plotly_chart(fig_competitors_amount, use_container_width=True)
-    
-    # Comparaison TS vs Concurrents
-    st.subheader("🔍 Comparaison TS vs Principaux Concurrents")
-    
-    top_competitors = competitors.head(5)
-    comparison_data = []
-    
-    # Ajouter TS
-    comparison_data.append({
-        'distributeur': 'TECHNOLOGIES SERVICES',
-        'montant_total': ts_market_share['total_ts'],
-        'nombre_soumissions': ts_market_share['nombre_soumissions_ts'],
-        'type': 'TS'
-    })
-    
-    # Ajouter top concurrents
-    for _, comp in top_competitors.iterrows():
-        comparison_data.append({
-            'distributeur': comp['distributeur'],
-            'montant_total': comp['montant_total'],
-            'nombre_soumissions': comp['nombre_soumissions'],
-            'type': 'Concurrent'
-        })
-    
-    comparison_df = pd.DataFrame(comparison_data)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        fig_comp_amount = px.bar(
-            comparison_df,
-            x='distributeur',
-            y='montant_total',
-            title="Comparaison Chiffre d'Affaires",
-            color='type'
-        )
-        st.plotly_chart(fig_comp_amount, use_container_width=True)
+        st.plotly_chart(fig_montant, use_container_width=True)
     
     with col2:
-        fig_comp_volume = px.bar(
-            comparison_df,
-            x='distributeur',
-            y='nombre_soumissions',
-            title="Comparaison Volume de Soumissions",
-            color='type'
+        # Répartition du marché
+        fig_pie = px.pie(
+            distributeurs_analysis,
+            values='montant_total',
+            names='distributeur',
+            title="Répartition du Marché par Distributeur"
         )
-        st.plotly_chart(fig_comp_volume, use_container_width=True)
-
-# ==================== SECTION 4: PERFORMANCE TS ====================
-
-elif section == "📈 Performance TS":
-    st.header("📈 Analyse de Performance - Technologies Services")
+        st.plotly_chart(fig_pie, use_container_width=True)
     
-    ts_performance = get_ts_performance_details(df)
+    # Informations sur les appels d'offres
+    st.subheader("📋 Informations des Appels d'Offres")
     
-    if ts_performance.empty:
-        st.warning("ℹ️ Technologies Services n'apparaît pas dans les données analysées.")
-    else:
-        # KPIs TS - CORRECTION DES NOMS DE COLONNES
-        total_ts_amount = ts_performance['montant_total_ts'].sum()
-        total_ts_submissions = ts_performance['nombre_soumissions'].sum()
-        avg_market_share = ts_performance['part_marche'].mean()
+    references = df['reference'].unique()
+    st.write(f"**Appels d'offres analysés :** {len(references)}")
+    for i, ref in enumerate(references[:5], 1):  # Afficher les 5 premiers
+        st.write(f"{i}. {ref}")
+    
+    if len(references) > 5:
+        st.write(f"... et {len(references) - 5} autres")
+
+# ==================== SECTION 2: ANALYSE PAR DISTRIBUTEUR ====================
+
+elif section == "📊 Analyse par Distributeur":
+    st.header("📊 Analyse Détailée par Distributeur")
+    
+    st.dataframe(
+        distributeurs_analysis,
+        column_config={
+            'distributeur': 'Distributeur',
+            'montant_total': st.column_config.NumberColumn('Montant Total (FCFA)', format='%d FCFA'),
+            'nombre_soumissions': 'Nombre de Soumissions',
+            'lots_couverts': 'Lots Couverts',
+            'paillasses_couvertes': 'Paillasses Couvertes',
+            'pourcentage_montant': st.column_config.NumberColumn('% du Marché', format='%.2f%%')
+        },
+        use_container_width=True
+    )
+    
+    # Filtre par distributeur
+    selected_distributeur = st.selectbox(
+        "Sélectionnez un distributeur pour voir le détail:",
+        options=distributeurs_analysis['distributeur'].unique()
+    )
+    
+    if selected_distributeur:
+        dist_data = df[df['distributeur'] == selected_distributeur]
+        
+        st.subheader(f"🔍 Détail pour {selected_distributeur}")
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.metric("CA Total TS", f"{total_ts_amount:,.0f} FCFA")
+            st.metric("Montant Total", f"{dist_data['montant soumission'].sum():,.0f} FCFA")
         
         with col2:
-            st.metric("Soumissions Total TS", f"{total_ts_submissions}")
+            st.metric("Nombre de Lots", f"{dist_data['gamme'].nunique()}")
         
         with col3:
-            st.metric("Part de Marché Moyenne", f"{avg_market_share:.1f}%")
+            st.metric("Paillasses Couvertes", f"{dist_data['paillasse'].nunique()}")
         
-        # Performance par paillasse - CORRECTION DES NOMS DE COLONNES
+        # Détail par paillasse
+        st.write("**Détail par Paillasse:**")
+        detail_paillasse = dist_data.groupby('paillasse').agg({
+            'montant soumission': 'sum',
+            'gamme': 'count'
+        }).reset_index()
+        
+        st.dataframe(detail_paillasse, use_container_width=True)
+
+# ==================== SECTION 3: POSITIONNEMENT TS PAR PAILLASSE ====================
+
+elif section == "🏥 Positionnement TS par Paillasse":
+    st.header("🏥 Positionnement de TS par Paillasse")
+    
+    if ts_paillasse_analysis.empty:
+        st.warning("Technologies Services n'apparaît pas dans les données analysées.")
+    else:
+        # Métriques TS
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("CA Total TS", f"{ts_paillasse_analysis['montant_total'].sum():,.0f} FCFA")
+        
+        with col2:
+            st.metric("Lots Soumissionnés", f"{ts_paillasse_analysis['lots_couverts'].sum()}")
+        
+        with col3:
+            st.metric("Paillasses Couvertes", f"{len(ts_paillasse_analysis)}")
+        
+        # Tableau des paillasses
         st.subheader("📊 Performance par Paillasse")
         
-        col1, col2 = st.columns(2)
+        st.dataframe(
+            ts_paillasse_analysis,
+            column_config={
+                'paillasse': 'Paillasse',
+                'montant_total': st.column_config.NumberColumn('Montant TS (FCFA)', format='%d FCFA'),
+                'nombre_soumissions': 'Soumissions',
+                'lots_couverts': 'Lots Couverts',
+                'pourcentage_ts': st.column_config.NumberColumn('% du CA TS', format='%.2f%%')
+            },
+            use_container_width=True
+        )
         
-        with col1:
-            fig_ts_performance = px.bar(
-                ts_performance.nlargest(10, 'montant_total_ts'),
-                x='paillasse',
-                y='montant_total_ts',
-                title="Top 10 Paillasses par CA TS"
+        # Sélection de paillasse pour le détail
+        selected_paillasse = st.selectbox(
+            "Sélectionnez une paillasse pour voir le détail:",
+            options=ts_paillasse_analysis['paillasse'].unique()
+        )
+        
+        if selected_paillasse:
+            st.subheader(f"🔍 Détail de la Paillasse: {selected_paillasse}")
+            
+            # Détail des distributeurs pour cette paillasse
+            detail_paillasse = get_paillasse_detail(df, selected_paillasse)
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.write("**Répartition par Distributeur:**")
+                st.dataframe(detail_paillasse, use_container_width=True)
+            
+            with col2:
+                # Graphique de répartition
+                fig = px.pie(
+                    detail_paillasse,
+                    values='montant_total',
+                    names='distributeur',
+                    title=f"Répartition {selected_paillasse}"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # Section commentaires pour le DG
+            st.subheader("💬 Commentaires du DG")
+            
+            # Initialiser le commentaire s'il n'existe pas
+            if selected_paillasse not in st.session_state.commentaires:
+                st.session_state.commentaires[selected_paillasse] = ""
+            
+            # Éditeur de commentaires
+            commentaire = st.text_area(
+                f"Commentaires pour {selected_paillasse}:",
+                value=st.session_state.commentaires[selected_paillasse],
+                height=150,
+                key=f"comment_{selected_paillasse}"
             )
-            st.plotly_chart(fig_ts_performance, use_container_width=True)
+            
+            # Sauvegarder le commentaire
+            if st.button("💾 Sauvegarder le commentaire", key=f"save_{selected_paillasse}"):
+                st.session_state.commentaires[selected_paillasse] = commentaire
+                st.success("Commentaire sauvegardé!")
+            
+            # Afficher le commentaire sauvegardé
+            if st.session_state.commentaires[selected_paillasse]:
+                st.info(f"**Commentaire sauvegardé:** {st.session_state.commentaires[selected_paillasse]}")
+
+# ==================== SECTION 4: LOTS NON POSITIONNÉS ====================
+
+elif section == "🔍 Lots Non Positionnés":
+    st.header("🔍 Lots Non Positionnés par TS")
+    
+    lots_non_positionnes = get_lots_non_positionnes_ts(df)
+    
+    if lots_non_positionnes.empty:
+        st.success("🎉 TS s'est positionné sur tous les lots!")
+    else:
+        st.metric(
+            "Lots Non Positionnés par TS",
+            f"{len(lots_non_positionnes)}",
+            help="Lots où Technologies Services ne s'est pas positionné"
+        )
         
-        with col2:
-            fig_ts_market_share = px.bar(
-                ts_performance.nlargest(10, 'part_marche'),
-                x='paillasse',
-                y='part_marche',
-                title="Top 10 Paillasses par Part de Marché TS"
+        st.subheader("📋 Liste des Lots Non Positionnés")
+        
+        st.dataframe(
+            lots_non_positionnes,
+            column_config={
+                'gamme': 'Lot/Sous-lot',
+                'paillasse': 'Paillasse',
+                'distributeur': 'Distributeurs Présents',
+                'montant soumission': st.column_config.NumberColumn('Montant (FCFA)', format='%d FCFA'),
+                'attribution': 'Attribué à'
+            },
+            use_container_width=True
+        )
+        
+        # Analyse des opportunités manquées
+        st.subheader("💡 Analyse des Opportunités")
+        
+        montant_opportunites = lots_non_positionnes['montant soumission'].sum()
+        st.write(f"**Potentiel manqué estimé :** {montant_opportunites:,.0f} FCFA")
+        
+        # Lots sans soumissionnaires
+        lots_sans_soumission = df[df['distributeur'] == 'PAS DE SOUMISSIONNAIRE']
+        if not lots_sans_sans_soumission.empty:
+            st.warning(f"⚠️ {len(lots_sans_soumission)} lots sans soumissionnaires identifiés")
+            
+            st.write("**Lots sans soumissionnaires:**")
+            st.dataframe(
+                lots_sans_soumission[['gamme', 'paillasse', 'montant soumission']],
+                use_container_width=True
             )
-            st.plotly_chart(fig_ts_market_share, use_container_width=True)
-        
-        # Points forts et axes d'amélioration
-        st.subheader("🎯 Analyse Stratégique")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.success("**✅ Points Forts**")
-            strong_categories = ts_performance[ts_performance['part_marche'] >= 20]
-            if not strong_categories.empty:
-                for _, cat in strong_categories.iterrows():
-                    st.write(f"• **{cat['paillasse']}** : {cat['part_marche']}% de part de marché")
-            else:
-                st.write("Aucune catégorie avec part de marché ≥ 20%")
-        
-        with col2:
-            st.warning("**📈 Axes d'Amélioration**")
-            weak_categories = ts_performance[ts_performance['part_marche'] < 10]
-            if not weak_categories.empty:
-                for _, cat in weak_categories.iterrows():
-                    st.write(f"• **{cat['paillasse']}** : {cat['part_marche']}% de part de marché")
-            else:
-                st.write("Toutes les catégories ont une part de marché ≥ 10%")
+
 # ==================== SECTION 5: DONNÉES BRUTES ====================
 
 elif section == "📋 Données Brutes":
@@ -511,9 +535,9 @@ elif section == "📋 Données Brutes":
         st.dataframe(df['montant soumission'].describe(), use_container_width=True)
     
     with col2:
-        st.write("**Répartition par paillasse:**")
-        paillasse_counts = df['paillasse'].value_counts()
-        st.dataframe(paillasse_counts, use_container_width=True)
+        st.write("**Répartition par référence:**")
+        reference_counts = df['reference'].value_counts()
+        st.dataframe(reference_counts, use_container_width=True)
     
     # Export des données
     st.subheader("📤 Export des Données")
@@ -522,13 +546,13 @@ elif section == "📋 Données Brutes":
     st.download_button(
         label="📥 Télécharger Données Brutes (CSV)",
         data=csv_data,
-        file_name="analyse_technologies_services.csv",
+        file_name=f"analyse_ts_{datetime.now().strftime('%Y%m%d')}.csv",
         mime="text/csv"
     )
 
 # Footer
 st.markdown("---")
 st.markdown(
-    "**📊 Analyse Stratégique Technologies Services** • "
-    "Focus sur la part de marché et le positionnement concurrentiel"
+    "**🏥 Dashboard Direction Générale - Technologies Services** • "
+    f"Dernière mise à jour : {datetime.now().strftime('%d/%m/%Y %H:%M')}"
 )
