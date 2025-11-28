@@ -7,7 +7,7 @@ import os
 
 # Configuration de la page
 st.set_page_config(
-    page_title="Dashboard - Technologies Services",
+    page_title="Dashboard DG - Technologies Services",
     page_icon="🏥",
     layout="wide"
 )
@@ -146,15 +146,15 @@ if not uploaded_file:
 
 # Chargement des données
 with st.spinner("Chargement et analyse des données..."):
-    df = load_and_clean_data(uploaded_file)
+    df_original = load_and_clean_data(uploaded_file)
     
-    if df.empty:
+    if df_original.empty:
         st.error("❌ Aucune donnée valide n'a pu être chargée.")
         st.stop()
 
 # Vérification des colonnes requises
 required_columns = ['paillasse', 'lot', 'distributeur', 'montant soumission', 'attribution', 'reference', 'famille']
-missing_columns = [col for col in required_columns if col not in df.columns]
+missing_columns = [col for col in required_columns if col not in df_original.columns]
 if missing_columns:
     st.error(f"❌ Colonnes manquantes: {', '.join(missing_columns)}")
     st.stop()
@@ -168,7 +168,7 @@ hospital_name = detect_hospital_name(uploaded_file.name)
 # ==================== FILTRE PAR APPEL D'OFFRE ====================
 
 st.sidebar.header("🎯 Filtre par Appel d'Offre")
-references = df['reference'].unique()
+references = df_original['reference'].unique()
 selected_reference = st.sidebar.selectbox(
     "Sélectionnez un appel d'offre:",
     options=["TOUS LES APPELS D'OFFRE"] + list(references)
@@ -176,10 +176,10 @@ selected_reference = st.sidebar.selectbox(
 
 # Appliquer le filtre si un appel d'offre spécifique est sélectionné
 if selected_reference != "TOUS LES APPELS D'OFFRE":
-    df_filtered = df[df['reference'] == selected_reference]
+    df_filtered = df_original[df_original['reference'] == selected_reference]
     st.sidebar.success(f"📋 Appel d'offre: {selected_reference}")
 else:
-    df_filtered = df
+    df_filtered = df_original
     st.sidebar.info("📊 Tous les appels d'offre")
 
 # ==================== TITRE DYNAMIQUE ====================
@@ -500,7 +500,7 @@ if section == "🎯 Tableau de Bord":
     # Informations sur les appels d'offres
     st.subheader("📋 Informations des Appels d'Offres")
     
-    references = df['reference'].unique()
+    references = df_original['reference'].unique()
     st.write(f"**Appels d'offres disponibles :** {len(references)}")
     for i, ref in enumerate(references[:5], 1):  # Afficher les 5 premiers
         st.write(f"{i}. {ref}")
@@ -661,10 +661,10 @@ elif section == "🏥 Positionnement TS par Paillasse":
                 st.plotly_chart(fig, use_container_width=True)
             
             # Section commentaires pour le DG
-            st.subheader("💬 Commentaires du DG")
+            st.subheader("💬 Commentaires")
             
             # Récupérer le commentaire existant depuis le DataFrame
-            commentaire_existant = get_comment_from_dataframe(df, selected_paillasse, selected_reference if selected_reference != "TOUS LES APPELS D'OFFRE" else "")
+            commentaire_existant = get_comment_from_dataframe(df_original, selected_paillasse, selected_reference if selected_reference != "TOUS LES APPELS D'OFFRE" else "")
             
             # Éditeur de commentaires
             commentaire = st.text_area(
@@ -680,13 +680,19 @@ elif section == "🏥 Positionnement TS par Paillasse":
                 # Sauvegarder le commentaire
                 if st.button("💾 Sauvegarder le commentaire", key=f"save_{selected_paillasse}_{selected_reference}"):
                     # Sauvegarder dans le DataFrame global
-                    global df
-                    df = save_comment_to_dataframe(df, selected_paillasse, commentaire, selected_reference if selected_reference != "TOUS LES APPELS D'OFFRE" else "")
+                    updated_df = save_comment_to_dataframe(df_original, selected_paillasse, commentaire, selected_reference if selected_reference != "TOUS LES APPELS D'OFFRE" else "")
+                    
+                    # Mettre à jour le DataFrame original
+                    st.session_state.df_original = updated_df
                     st.success("Commentaire sauvegardé dans le fichier!")
             
             with col2:
                 # Télécharger le fichier mis à jour
-                csv_data = df.to_csv(index=False).encode('utf-8')
+                if 'df_original' in st.session_state:
+                    csv_data = st.session_state.df_original.to_csv(index=False).encode('utf-8')
+                else:
+                    csv_data = df_original.to_csv(index=False).encode('utf-8')
+                    
                 st.download_button(
                     label="📥 Télécharger avec commentaires",
                     data=csv_data,
@@ -701,7 +707,7 @@ elif section == "🏥 Positionnement TS par Paillasse":
 
 # ==================== SECTION 4: LOTS NON POSITIONNÉS ====================
 
-elif section == "🔍 Lots Non Soumissionnés":
+elif section == "🔍 Lots Non Positionnés":
     st.header("🔍 Lots Non Positionnés par TS")
     
     if selected_reference != "TOUS LES APPELS D'OFFRE":
@@ -718,7 +724,7 @@ elif section == "🔍 Lots Non Soumissionnés":
             help="Lots où Technologies Services ne s'est pas positionné"
         )
         
-        st.subheader("📋 Liste des Lots Non Positionnés")
+        st.subheader("📋 Liste des Lots Non Soumissionnés")
         
         # Afficher chaque lot avec le détail des distributeurs
         for _, lot in lots_non_positionnes.iterrows():
@@ -757,7 +763,7 @@ elif section == "🔍 Lots Non Soumissionnés":
         st.write(f"**Potentiel manqué estimé :** {format_montant(montant_opportunites)}")
         
         # Lots sans soumissionnaires
-        lots_sans_soumission = df_filtered[df_filtered['distributeur'] == 'PAS DE SOUMISSIONNAIRE']
+        lots_sans_soumission = df_filtered[df_filtered['distributeur'] == 'PAS DE SOUMISSIONNAIRES']
         if not lots_sans_soumission.empty:
             st.warning(f"⚠️ {len(lots_sans_soumission)} lots sans soumissionnaires identifiés")
             
@@ -800,7 +806,7 @@ elif section == "📋 Données Brutes":
     
     with col2:
         st.write("**Répartition par référence:**")
-        reference_counts = df['reference'].value_counts()
+        reference_counts = df_original['reference'].value_counts()
         st.dataframe(reference_counts, use_container_width=True)
     
     # Export des données
@@ -820,7 +826,11 @@ elif section == "📋 Données Brutes":
     
     with col2:
         # Export de toutes les données avec commentaires
-        csv_data_all = df.to_csv(index=False).encode('utf-8')
+        if 'df_original' in st.session_state:
+            csv_data_all = st.session_state.df_original.to_csv(index=False).encode('utf-8')
+        else:
+            csv_data_all = df_original.to_csv(index=False).encode('utf-8')
+            
         st.download_button(
             label="📥 Toutes Donnees avec Commentaires",
             data=csv_data_all,
