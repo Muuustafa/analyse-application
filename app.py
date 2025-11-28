@@ -489,13 +489,45 @@ if section == "🎯 Tableau de Bord":
         st.plotly_chart(fig_montant, use_container_width=True)
     
     with col2:
-        # Répartition du marché
+        # Répartition du marché avec regroupement des petits distributeurs
+        if len(distributeurs_analysis) > 9:
+            # Prendre les 9 premiers distributeurs
+            top_9 = distributeurs_analysis.head(9).copy()
+            
+            # Calculer le total des autres distributeurs
+            autres_montant = distributeurs_analysis.iloc[9:]['montant_total'].sum()
+            autres_count = len(distributeurs_analysis) - 9
+            
+            # Créer une ligne "AUTRES"
+            autres_row = pd.DataFrame([{
+                'distributeur': f'AUTRES ({autres_count} distributeurs)',
+                'montant_total': autres_montant,
+                'nombre_soumissions': distributeurs_analysis.iloc[9:]['nombre_soumissions'].sum(),
+                'lots_couverts': distributeurs_analysis.iloc[9:]['lots_couverts'].sum(),
+                'paillasses_couvertes': distributeurs_analysis.iloc[9:]['paillasses_couvertes'].sum(),
+                'pourcentage_montant': (autres_montant / distributeurs_analysis['montant_total'].sum() * 100)
+            }])
+            
+            # Combiner les top 9 avec "AUTRES"
+            pie_data = pd.concat([top_9, autres_row], ignore_index=True)
+        else:
+            pie_data = distributeurs_analysis.copy()
+        
+        # Créer le diagramme circulaire
         fig_pie = px.pie(
-            distributeurs_analysis,
+            pie_data,
             values='montant_total',
             names='distributeur',
-            title="Répartition du Marché par Distributeur"
+            title="Répartition du Marché par Distributeur (Top 9 + Autres)",
+            hover_data={'montant_total': ':,.0f', 'pourcentage_montant': ':.1f%'}
         )
+        
+        # Améliorer le format des tooltips
+        fig_pie.update_traces(
+            hovertemplate="<b>%{label}</b><br>Montant: %{value:,.0f} FCFA<br>Part: %{percent}<extra></extra>",
+            textinfo='percent+label'
+        )
+        
         st.plotly_chart(fig_pie, use_container_width=True)
     
     # Informations sur les appels d'offres
