@@ -225,7 +225,7 @@ def calculate_kpis(data):
     lots_attribues_ts = data[data['attribution'] == TS_NAME]['lot'].nunique()
     pourcentage_attribution_ts = (lots_attribues_ts / total_lots * 100) if total_lots > 0 else 0
     
-    # Lots non positionnés par TS
+    # Lots non Soumissionnés par TS
     tous_les_lots = set(data['lot'].unique())
     lots_ts = set(ts_data['lot'].unique())
     lots_non_positionnes_ts = tous_les_lots - lots_ts
@@ -300,10 +300,11 @@ def get_paillasse_detail(data, paillasse_selectionnee):
         'montant soumission': 'sum',
         'lot': 'count',
         'marque': lambda x: ', '.join(x.unique()),
+        'modele': lambda x: ', '.join(x.unique()),
         'famille': lambda x: ', '.join(x.unique())
     }).reset_index()
     
-    distributeurs.columns = ['distributeur', 'montant_total', 'nombre_lots', 'marques', 'familles']
+    distributeurs.columns = ['distributeur', 'montant_total', 'nombre_lots', 'marques', 'modeles', 'familles']
     distributeurs = distributeurs.sort_values('montant_total', ascending=False)
     
     return distributeurs
@@ -457,7 +458,7 @@ if section == "🎯 Tableau de Bord":
     
     with col1:
         st.metric(
-            "Lots Non Positionnés TS",
+            "Lots Non Soumissionnés TS",
             f"{kpis['lots_non_positionnes_ts']}",
             help="Lots où TS ne s'est pas positionné"
         )
@@ -646,7 +647,7 @@ elif section == "🏥 Positionnement TS par Paillasse":
             with col1:
                 st.write("**Répartition par Distributeur:**")
                 st.dataframe(
-                    detail_paillasse_display[['distributeur', 'montant_total_format', 'nombre_lots', 'marques', 'familles']],
+                    detail_paillasse_display[['distributeur', 'montant_total_format', 'nombre_lots', 'marques', 'modeles', 'familles']],
                     use_container_width=True
                 )
             
@@ -705,10 +706,10 @@ elif section == "🏥 Positionnement TS par Paillasse":
             if commentaire_existant:
                 st.info(f"**Commentaire sauvegardé:** {commentaire_existant}")
 
-# ==================== SECTION 4: LOTS NON POSITIONNÉS ====================
+# ==================== SECTION 4: LOTS NON Soumissionnés ====================
 
-elif section == "🔍 Lots Non Positionnés":
-    st.header("🔍 Lots Non Positionnés par TS")
+elif section == "🔍 Lots Non Soumissionnés":
+    st.header("🔍 Lots Non Soumissionnés par TS")
     
     if selected_reference != "TOUS LES APPELS D'OFFRE":
         st.info(f"**📋 Appel d'offre analysé :** {selected_reference}")
@@ -719,7 +720,7 @@ elif section == "🔍 Lots Non Positionnés":
         st.success("🎉 TS s'est positionné sur tous les lots!")
     else:
         st.metric(
-            "Lots Non Positionnés par TS",
+            "Lots Non Soumissionnés par TS",
             f"{len(lots_non_positionnes)}",
             help="Lots où Technologies Services ne s'est pas positionné"
         )
